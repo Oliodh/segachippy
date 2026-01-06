@@ -164,7 +164,7 @@ unsafe class Program
             _lastRomDir ?? "",
             Environment.CurrentDirectory,
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ROMs"),
-            "/tmp"
+            Path.GetTempPath()
         };
 
         Console.WriteLine("\n=== ROM Selector (R pressed) ===");
@@ -195,7 +195,7 @@ unsafe class Program
 
     static void CreateTestRom()
     {
-        string testPath = "/tmp/test.sms";
+        string testPath = Path.Combine(Path.GetTempPath(), "test.sms");
         byte[] testRom = new byte[0x8000];
         int i = 0;
 

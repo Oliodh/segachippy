@@ -581,11 +581,11 @@ public sealed class Z80Cpu
 
     private void Daa()
     {
-        int a = _a; int c = _f & FlagC; int h = _f & FlagH; int n = _f & FlagN;
+        int oldA = _a; int a = _a; int c = _f & FlagC; int h = _f & FlagH; int n = _f & FlagN;
         int lo = a & 0x0F; int hi = a >> 4;
         if (n == 0) { if (h != 0 || lo > 9) a += 0x06; if (c != 0 || hi > 9 || (hi >= 9 && lo > 9)) { a += 0x60; c = FlagC; } }
         else { if (h != 0) a -= 0x06; if (c != 0) a -= 0x60; }
-        _a = (byte)a; _f = (byte)(SZ(_a) | ParityTable[_a] | c | n | ((_a ^ (byte)a) & FlagH));
+        _a = (byte)a; _f = (byte)(SZ(_a) | ParityTable[_a] | c | n | ((oldA ^ _a) & FlagH));
     }
 
     private byte In(byte port) { byte v = _bus.ReadPort(port); _f = (byte)((_f & FlagC) | SZ(v) | ParityTable[v]); return v; }
