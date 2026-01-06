@@ -7,4 +7,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="ppy.SDL3-CS" Version="2025.604.0" />
+  </ItemGroup>
+
 </Project>
