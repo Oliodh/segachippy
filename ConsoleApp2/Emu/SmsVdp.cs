@@ -2,25 +2,28 @@ using System;
 
 namespace ConsoleApp2.Emu;
 
-// Minimal SMS VDP subset:
-// - VRAM (16KB), CRAM (32 bytes)
-// - Port 0xBF control writes (very simplified): set VRAM write address
-// - Port 0xBE data writes: write into VRAM/CRAM (VRAM only in this minimal build)
-// - Renders background using Mode 4 tilemap at name table base from register #2
+/// <summary>
+/// SMS VDP (Video Display Processor) with Mode 4 support including sprites.
+/// </summary>
 public sealed class SmsVdp
 {
     private readonly byte[] _vram = new byte[0x4000];
     private readonly byte[] _cram = new byte[0x20];
-
     private readonly byte[] _regs = new byte[16];
 
     private ushort _address;
     private byte _controlLatch;
     private bool _controlSecond;
+    private byte _readBuffer;
 
     private byte _status;
+    private int _line;
+    private int _cyclesInLine;
 
-    private int _cpuCycleAccumulator;
+    // Timing constants (PAL)
+    private const int CyclesPerLine = 228;
+    private const int LinesPerFrame = 313;
+    private const int ActiveLines = 192;
 
     public SmsVdp()
     {
@@ -28,63 +31,122 @@ public sealed class SmsVdp
     }
 
     public byte[] FramebufferRgba32 { get; }
+    public bool VBlankInterrupt { get; private set; }
+    public bool LineInterrupt { get; private set; }
 
     public void Reset()
     {
         Array.Clear(_vram);
         Array.Clear(_cram);
         Array.Clear(_regs);
+        Array.Clear(FramebufferRgba32);
 
         _address = 0;
         _controlLatch = 0;
         _controlSecond = false;
+        _readBuffer = 0;
         _status = 0;
-        _cpuCycleAccumulator = 0;
+        _line = 0;
+        _cyclesInLine = 0;
+        VBlankInterrupt = false;
+        LineInterrupt = false;
 
-        // Reasonable defaults
+        // Defaults
         _regs[0] = 0x00;
         _regs[1] = 0x00;
-        _regs[2] = 0xFF; // name table base (we'll mask)
+        _regs[2] = 0xFF;
     }
 
     public void BeginFrame()
     {
-        // Clear frame (opaque black)
+        _line = 0;
+        _cyclesInLine = 0;
         Array.Clear(FramebufferRgba32);
     }
 
     public void EndFrame()
     {
-        // For now we render once per frame (cheap + simple).
-        RenderBackground();
+        // Already rendered per-line
     }
 
     public void StepCpuCycles(int cycles)
     {
-        _cpuCycleAccumulator += cycles;
+        _cyclesInLine += cycles;
 
-        // In a more complete emulator, this would advance scanlines and set VBlank, request IRQ, etc.
-        // Here we just set VBlank at end-of-frame by EndFrame().
+        while (_cyclesInLine >= CyclesPerLine)
+        {
+            _cyclesInLine -= CyclesPerLine;
+
+            // Render current line if in active display
+            if (_line < ActiveLines)
+            {
+                RenderLine(_line);
+            }
+
+            // VBlank at line 192
+            if (_line == ActiveLines)
+            {
+                _status |= 0x80; // VBlank flag
+                if ((_regs[1] & 0x20) != 0) // IE bit
+                {
+                    VBlankInterrupt = true;
+                }
+            }
+
+            _line++;
+            if (_line >= LinesPerFrame)
+            {
+                _line = 0;
+            }
+        }
+    }
+
+    public bool GetInterruptPending()
+    {
+        return VBlankInterrupt || LineInterrupt;
+    }
+
+    public void ClearInterrupts()
+    {
+        VBlankInterrupt = false;
+        LineInterrupt = false;
     }
 
     public byte ReadData()
     {
-        // VRAM read buffer behavior omitted; return 0xFF for now.
-        return 0xFF;
+        _controlSecond = false;
+        byte result = _readBuffer;
+        _readBuffer = _vram[_address & 0x3FFF];
+        _address++;
+        return result;
     }
 
     public byte ReadStatus()
     {
-        var s = _status;
+        byte s = _status;
         _status = 0;
         _controlSecond = false;
+        VBlankInterrupt = false;
+        LineInterrupt = false;
         return s;
     }
 
     public void WriteData(byte value)
     {
-        // Minimal: treat current address as VRAM write.
-        _vram[_address & 0x3FFF] = value;
+        _controlSecond = false;
+        _readBuffer = value;
+
+        int code = (_address >> 14) & 0x03;
+        if (code == 3)
+        {
+            // CRAM write
+            _cram[_address & 0x1F] = value;
+        }
+        else
+        {
+            // VRAM write
+            _vram[_address & 0x3FFF] = value;
+        }
         _address++;
     }
 
@@ -94,118 +156,161 @@ public sealed class SmsVdp
         {
             _controlLatch = value;
             _controlSecond = true;
+            _address = (ushort)((_address & 0xFF00) | value);
             return;
         }
 
         _controlSecond = false;
+        _address = (ushort)(_controlLatch | (value << 8));
 
-        // For this minimal build, interpret as:
-        // address = (value & 0x3F) << 8 | latch
-        // code = value >> 6 (ignored mostly)
-        _address = (ushort)(((_uint(value) & 0x3Fu) << 8) | _controlLatch);
-
-        var code = (value >> 6) & 0x03;
-        if (code == 2)
+        int code = (value >> 6) & 0x03;
+        if (code == 0)
         {
-            // Register write: latch = data, low nibble of value selects register
-            var reg = value & 0x0F;
+            // VRAM read - pre-fetch
+            _readBuffer = _vram[_address & 0x3FFF];
+            _address++;
+        }
+        else if (code == 2)
+        {
+            // Register write
+            int reg = value & 0x0F;
             if (reg < _regs.Length)
             {
                 _regs[reg] = _controlLatch;
             }
         }
-        else if (code == 3)
-        {
-            // CRAM write address in real hardware; omitted for now
-        }
     }
 
-    private static uint _uint(byte b) => b;
-
-    private void RenderBackground()
+    private void RenderLine(int line)
     {
-        // Mode 4 name table base: reg2 bits, base = (reg2 & 0x0E) << 10 (commonly)
-        // We'll approximate: base = (reg2 & 0x0E) * 0x400
-        var nameTableBase = (_regs[2] & 0x0E) * 0x400;
+        // Get background scroll
+        int scrollX = _regs[8];
+        int scrollY = _regs[9];
 
-        // Tile pattern base is typically 0x0000 in Mode 4; sprite/scroll regs ignored.
-        // Tilemap is 32x28 (or 32x24 visible). We'll render 32x24 tiles for 192 lines.
-        for (var ty = 0; ty < 24; ty++)
+        // Name table base
+        int nameTableBase = ((_regs[2] & 0x0E) << 10) & 0x3800;
+
+        // Background priority array for sprite handling
+        Span<bool> bgPriority = stackalloc bool[256];
+        Span<byte> lineBuffer = stackalloc byte[256];
+
+        // Render background
+        int tileRow = ((line + scrollY) >> 3) & 0x1F;
+        int fineY = (line + scrollY) & 0x07;
+
+        for (int col = 0; col < 256; col++)
         {
-            for (var tx = 0; tx < 32; tx++)
-            {
-                var entryAddr = (nameTableBase + ((ty * 32 + tx) * 2)) & 0x3FFF;
-                var lo = _vram[entryAddr];
-                var hi = _vram[(entryAddr + 1) & 0x3FFF];
+            int scrolledCol = (col + scrollX) & 0xFF;
+            int tileCol = scrolledCol >> 3;
+            int fineX = scrolledCol & 0x07;
 
-                // Mode 4 tile entry: 9-bit tile index + attributes (we ignore many)
-                var tileIndex = lo | ((hi & 0x01) << 8);
-                var paletteSelect = (hi >> 3) & 0x01; // 0/1
-                var hFlip = (hi & 0x02) != 0;
-                var vFlip = (hi & 0x04) != 0;
+            int entryAddr = nameTableBase + ((tileRow * 32 + tileCol) * 2);
+            byte lo = _vram[entryAddr & 0x3FFF];
+            byte hi = _vram[(entryAddr + 1) & 0x3FFF];
 
-                DrawTile8x8(tx * 8, ty * 8, tileIndex, paletteSelect, hFlip, vFlip);
-            }
+            int tileIndex = lo | ((hi & 0x01) << 8);
+            int palette = (hi >> 3) & 0x01;
+            bool hFlip = (hi & 0x02) != 0;
+            bool vFlip = (hi & 0x04) != 0;
+            bool priority = (hi & 0x10) != 0;
+
+            int tileY = vFlip ? (7 - fineY) : fineY;
+            int tileX = hFlip ? fineX : (7 - fineX);
+
+            int tileBase = (tileIndex * 32) & 0x3FFF;
+            int rowAddr = tileBase + tileY * 4;
+
+            byte b0 = _vram[(rowAddr + 0) & 0x3FFF];
+            byte b1 = _vram[(rowAddr + 1) & 0x3FFF];
+            byte b2 = _vram[(rowAddr + 2) & 0x3FFF];
+            byte b3 = _vram[(rowAddr + 3) & 0x3FFF];
+
+            int colorIndex =
+                (((b0 >> tileX) & 1) << 0) |
+                (((b1 >> tileX) & 1) << 1) |
+                (((b2 >> tileX) & 1) << 2) |
+                (((b3 >> tileX) & 1) << 3);
+
+            lineBuffer[col] = (byte)(palette * 16 + colorIndex);
+            bgPriority[col] = priority && colorIndex != 0;
         }
-    }
 
-    private void DrawTile8x8(int dstX, int dstY, int tileIndex, int palette, bool hFlip, bool vFlip)
-    {
-        // Mode 4 patterns are 32 bytes per tile (4bpp planar):
-        // For each row: 4 bytes (bitplanes 0..3)
-        var tileBase = (tileIndex * 32) & 0x3FFF;
+        // Render sprites
+        int spriteBase = ((_regs[5] & 0x7E) << 7) & 0x3F00;
+        int patternBase = (_regs[6] & 0x04) != 0 ? 0x2000 : 0;
+        bool tallSprites = (_regs[1] & 0x02) != 0;
+        int spriteHeight = tallSprites ? 16 : 8;
 
-        for (var row = 0; row < 8; row++)
+        int spritesOnLine = 0;
+        for (int i = 0; i < 64 && spritesOnLine < 8; i++)
         {
-            var srcRow = vFlip ? (7 - row) : row;
+            int y = _vram[(spriteBase + i) & 0x3FFF];
+            if (y == 0xD0) break; // End of sprite list
 
-            var b0 = _vram[(tileBase + srcRow * 4 + 0) & 0x3FFF];
-            var b1 = _vram[(tileBase + srcRow * 4 + 1) & 0x3FFF];
-            var b2 = _vram[(tileBase + srcRow * 4 + 2) & 0x3FFF];
-            var b3 = _vram[(tileBase + srcRow * 4 + 3) & 0x3FFF];
+            y++;
+            if (y > 240) y -= 256;
 
-            var y = dstY + row;
-            if ((uint)y >= 192u)
+            if (line < y || line >= y + spriteHeight) continue;
+
+            spritesOnLine++;
+
+            int x = _vram[(spriteBase + 128 + i * 2) & 0x3FFF];
+            int tileIndex = _vram[(spriteBase + 128 + i * 2 + 1) & 0x3FFF];
+
+            if (tallSprites) tileIndex &= 0xFE;
+
+            int spriteY = line - y;
+            int tileAddr = patternBase + (tileIndex * 32) + spriteY * 4;
+
+            byte b0 = _vram[(tileAddr + 0) & 0x3FFF];
+            byte b1 = _vram[(tileAddr + 1) & 0x3FFF];
+            byte b2 = _vram[(tileAddr + 2) & 0x3FFF];
+            byte b3 = _vram[(tileAddr + 3) & 0x3FFF];
+
+            for (int sx = 0; sx < 8; sx++)
             {
-                continue;
-            }
+                int px = x + sx;
+                if (px < 0 || px >= 256) continue;
 
-            for (var col = 0; col < 8; col++)
-            {
-                var bit = hFlip ? col : (7 - col);
-
-                var c =
+                int bit = 7 - sx;
+                int colorIndex =
                     (((b0 >> bit) & 1) << 0) |
                     (((b1 >> bit) & 1) << 1) |
                     (((b2 >> bit) & 1) << 2) |
                     (((b3 >> bit) & 1) << 3);
 
-                var x = dstX + col;
-                if ((uint)x >= 256u)
-                {
-                    continue;
-                }
+                if (colorIndex == 0) continue; // Transparent
 
-                // Palette index: palette*16 + c. Use CRAM if present, otherwise grayscale ramp.
-                var rgba = ColorFromCram(palette * 16 + c);
-                var idx = (y * 256 + x) * 4;
-                FramebufferRgba32[idx + 0] = (byte)(rgba >> 24);
-                FramebufferRgba32[idx + 1] = (byte)(rgba >> 16);
-                FramebufferRgba32[idx + 2] = (byte)(rgba >> 8);
-                FramebufferRgba32[idx + 3] = (byte)rgba;
+                // Sprite uses second palette
+                if (!bgPriority[px])
+                {
+                    lineBuffer[px] = (byte)(16 + colorIndex);
+                }
             }
+        }
+
+        // Write to framebuffer
+        int fbOffset = line * 256 * 4;
+        for (int x = 0; x < 256; x++)
+        {
+            uint rgba = ColorFromCram(lineBuffer[x]);
+            FramebufferRgba32[fbOffset + 0] = (byte)(rgba >> 24);
+            FramebufferRgba32[fbOffset + 1] = (byte)(rgba >> 16);
+            FramebufferRgba32[fbOffset + 2] = (byte)(rgba >> 8);
+            FramebufferRgba32[fbOffset + 3] = (byte)rgba;
+            fbOffset += 4;
         }
     }
 
     private uint ColorFromCram(int index)
     {
-        index &= 0x1F; // 32 entries total in CRAM
-        var v = _cram[index];
+        index &= 0x1F;
+        byte v = _cram[index];
 
-        // SMS CRAM: 2 bits per channel (BBGGRR?? depending); approximate to RGB:
-        var r = (v & 0x03);
-        var g = (v >> 2) & 0x03;
-        var b = (v >> 4) & 0x03;
+        // SMS CRAM: 2 bits per channel (--BBGGRR)
+        int r = (v & 0x03);
+        int g = (v >> 2) & 0x03;
+        int b = (v >> 4) & 0x03;
 
         byte R = (byte)(r * 85);
         byte G = (byte)(g * 85);

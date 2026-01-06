@@ -5,10 +5,11 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ppy.SDL3-CS" Version="2025.604.0" />
+    <PackageReference Include="ppy.SDL3-CS" Version="2025.608.0" />
   </ItemGroup>
 
 </Project>
