@@ -196,12 +196,12 @@ unsafe class Program
 
     static void FreeDialogMemory()
     {
-        if (_dialogFilterNamePtr != 0) Marshal.FreeHGlobal(_dialogFilterNamePtr);
-        if (_dialogFilterPatternPtr != 0) Marshal.FreeHGlobal(_dialogFilterPatternPtr);
-        if (_dialogDefaultLocationPtr != 0) Marshal.FreeHGlobal(_dialogDefaultLocationPtr);
-        _dialogFilterNamePtr = 0;
-        _dialogFilterPatternPtr = 0;
-        _dialogDefaultLocationPtr = 0;
+        if (_dialogFilterNamePtr != nint.Zero) Marshal.FreeHGlobal(_dialogFilterNamePtr);
+        if (_dialogFilterPatternPtr != nint.Zero) Marshal.FreeHGlobal(_dialogFilterPatternPtr);
+        if (_dialogDefaultLocationPtr != nint.Zero) Marshal.FreeHGlobal(_dialogDefaultLocationPtr);
+        _dialogFilterNamePtr = nint.Zero;
+        _dialogFilterPatternPtr = nint.Zero;
+        _dialogDefaultLocationPtr = nint.Zero;
     }
 
     [System.Runtime.InteropServices.UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
