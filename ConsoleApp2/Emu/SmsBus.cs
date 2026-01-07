@@ -41,8 +41,9 @@ public sealed class SmsBus : IZ80Bus
         }
         else
         {
-            // Ceiling divide to get the 0-based index of the last 16KB bank; clamp to 2 so sub-48KB ROMs keep the old mirrored slot2 mapping
-            int lastBank = (_rom.Length + (BankSize - 1)) / BankSize - 1;
+            // Ceiling divide to get the 0-based index of the last 16KB bank; clamp to 2 so 48KB-or-smaller ROMs keep the old mirrored slot2 mapping
+            int bankCount = (_rom.Length + (BankSize - 1)) / BankSize;
+            int lastBank = bankCount - 1;
             _bank2 = Math.Max(2, lastBank);
         }
         Joypad1 = 0xFF;
