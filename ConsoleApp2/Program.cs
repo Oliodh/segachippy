@@ -16,6 +16,8 @@ unsafe class Program
     private static string? _lastRomDir;
     private static SDL_DialogFileFilter[]? _dialogFilters;
     private static GCHandle _dialogFiltersHandle = default;
+    private static int _frameCount = 0;
+    private static int _lastLoggedFrame = 0;
 
     private const int ScreenWidth = 256;
     private const int ScreenHeight = 192;
@@ -78,6 +80,14 @@ unsafe class Program
                 if (!_paused && _sms != null)
                 {
                     _sms.RunFrame();
+                    _frameCount++;
+                    
+                    // Log every 300 frames (6 seconds at 50fps)
+                    if (_frameCount - _lastLoggedFrame >= 300)
+                    {
+                        Console.WriteLine($"[DEBUG] Running: frame {_frameCount}, paused={_paused}");
+                        _lastLoggedFrame = _frameCount;
+                    }
                 }
 
                 Render();
@@ -111,13 +121,27 @@ unsafe class Program
             {
                 HandleKeyDown(e.key);
             }
+            else if (e.type == (uint)SDL_EventType.SDL_EVENT_DROP_BEGIN)
+            {
+                Console.WriteLine("\n=== DROP_BEGIN: File drag started ===");
+            }
             else if (e.type == (uint)SDL_EventType.SDL_EVENT_DROP_FILE)
             {
+                Console.WriteLine("\n=== DROP_FILE: File dropped ===");
                 string? droppedFile = Marshal.PtrToStringUTF8((nint)e.drop.data);
                 if (!string.IsNullOrEmpty(droppedFile))
                 {
+                    Console.WriteLine($"Dropped file path: {droppedFile}");
                     LoadRom(droppedFile);
                 }
+                else
+                {
+                    Console.WriteLine("ERROR: Dropped file path is null or empty");
+                }
+            }
+            else if (e.type == (uint)SDL_EventType.SDL_EVENT_DROP_COMPLETE)
+            {
+                Console.WriteLine("=== DROP_COMPLETE: File drag finished ===\n");
             }
         }
 
@@ -280,26 +304,42 @@ unsafe class Program
 
     static void LoadRom(string path)
     {
+        Console.WriteLine($"\n=== LoadRom called with path: {path} ===");
+        
         try
         {
+            if (!File.Exists(path))
+            {
+                Console.WriteLine($"ERROR: File does not exist: {path}");
+                return;
+            }
+
             byte[] rom = File.ReadAllBytes(path);
+            Console.WriteLine($"Read {rom.Length} bytes from ROM file");
+            
             if (rom.Length % 16384 == 512)
             {
+                Console.WriteLine("Detected 512-byte header, stripping it");
                 byte[] stripped = new byte[rom.Length - 512];
                 Array.Copy(rom, 512, stripped, 0, stripped.Length);
                 rom = stripped;
             }
 
+            Console.WriteLine($"Loading ROM into emulator ({rom.Length} bytes, {rom.Length / 1024}KB)");
             _sms?.LoadRom(rom);
             _lastRomDir = Path.GetDirectoryName(path);
+            
+            Console.WriteLine($"Setting _paused = false (was: {_paused})");
             _paused = false;
 
             Console.WriteLine($"Loaded: {Path.GetFileName(path)} ({rom.Length / 1024}KB)");
             UpdateTitle();
+            Console.WriteLine("=== LoadRom completed successfully ===\n");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Failed to load ROM: {ex.Message}");
+            Console.WriteLine($"ERROR: Failed to load ROM: {ex.Message}");
+            Console.WriteLine($"Stack trace: {ex.StackTrace}");
         }
     }
 
