@@ -376,7 +376,13 @@ unsafe class Program
 
     static void Render()
     {
-        if (_sms == null) return;
+        if (_sms == null)
+        {
+            // Clear to black when no SMS system
+            SDL3.SDL_RenderClear(_renderer);
+            SDL3.SDL_RenderPresent(_renderer);
+            return;
+        }
 
         nint pixels;
         int pitch;
@@ -389,6 +395,10 @@ unsafe class Program
                 Marshal.Copy(fb, y * ScreenWidth * 4, pixels + y * pitch, ScreenWidth * 4);
             }
             SDL3.SDL_UnlockTexture(_texture);
+        }
+        else
+        {
+            Console.WriteLine($"ERROR: Failed to lock texture: {SDL3.SDL_GetError()}");
         }
 
         SDL3.SDL_RenderClear(_renderer);
