@@ -4,6 +4,8 @@ namespace ConsoleApp2.Emu;
 
 public sealed class SmsBus : IZ80Bus
 {
+    private const int BankSize = 0x4000;
+
     private readonly SmsVdp _vdp;
 
     private readonly byte[] _ram = new byte[0x2000]; // 8KB system RAM
@@ -33,7 +35,17 @@ public sealed class SmsBus : IZ80Bus
         Array.Clear(_ram);
         _bank0 = 0;
         _bank1 = 1;
-        _bank2 = 2;
+        if (_rom.Length == 0)
+        {
+            _bank2 = 2;
+        }
+        else
+        {
+            // Ceiling divide to get the 0-based index of the last 16KB bank; clamp to 2 so ROMs with 3 or fewer banks (≤48KB) keep the old mirrored bank2 mapping
+            int bankCount = (_rom.Length + (BankSize - 1)) / BankSize;
+            int lastBank = bankCount - 1;
+            _bank2 = Math.Max(2, lastBank);
+        }
         Joypad1 = 0xFF;
         Joypad2 = 0xFF;
     }
@@ -138,7 +150,7 @@ public sealed class SmsBus : IZ80Bus
     private byte ReadRomBank(int bank, int offset)
     {
         if (_rom.Length == 0) return 0xFF;
-        int addr = (bank * 0x4000 + offset) % _rom.Length;
+        int addr = (bank * BankSize + offset) % _rom.Length;
         return _rom[addr];
     }
 }
