@@ -36,7 +36,8 @@ public sealed class SmsVdp
 
     public byte ReadHCounter()
     {
-        // Map cycles in line (0..CyclesPerLine) to 0..255 range expected by games
+        // Map cycles in line (0..CyclesPerLine) to 0..255 range expected by games.
+        // Port reads are infrequent, so keep the straightforward calculation.
         int h = (_cyclesInLine * 256 + (CyclesPerLine / 2)) / CyclesPerLine;
         return (byte)h;
     }
