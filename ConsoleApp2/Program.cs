@@ -168,9 +168,7 @@ unsafe class Program
         Console.WriteLine("\n=== Opening ROM File Dialog ===");
 
         // Free any previously allocated memory
-        if (_dialogFilterNamePtr != 0) Marshal.FreeHGlobal(_dialogFilterNamePtr);
-        if (_dialogFilterPatternPtr != 0) Marshal.FreeHGlobal(_dialogFilterPatternPtr);
-        if (_dialogDefaultLocationPtr != 0) Marshal.FreeHGlobal(_dialogDefaultLocationPtr);
+        FreeDialogMemory();
 
         // Define file filter for SMS ROM files
         SDL_DialogFileFilter filter = new SDL_DialogFileFilter();
@@ -194,6 +192,16 @@ unsafe class Program
         // Note: Memory will be freed in the callback or on next dialog open
         // Note: The callback will be invoked asynchronously when the user selects a file
         Console.WriteLine("File dialog opened. Select a ROM file...");
+    }
+
+    static void FreeDialogMemory()
+    {
+        if (_dialogFilterNamePtr != 0) Marshal.FreeHGlobal(_dialogFilterNamePtr);
+        if (_dialogFilterPatternPtr != 0) Marshal.FreeHGlobal(_dialogFilterPatternPtr);
+        if (_dialogDefaultLocationPtr != 0) Marshal.FreeHGlobal(_dialogDefaultLocationPtr);
+        _dialogFilterNamePtr = 0;
+        _dialogFilterPatternPtr = 0;
+        _dialogDefaultLocationPtr = 0;
     }
 
     [System.Runtime.InteropServices.UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
@@ -323,9 +331,7 @@ unsafe class Program
     static void Cleanup()
     {
         // Free dialog memory if allocated
-        if (_dialogFilterNamePtr != 0) Marshal.FreeHGlobal(_dialogFilterNamePtr);
-        if (_dialogFilterPatternPtr != 0) Marshal.FreeHGlobal(_dialogFilterPatternPtr);
-        if (_dialogDefaultLocationPtr != 0) Marshal.FreeHGlobal(_dialogDefaultLocationPtr);
+        FreeDialogMemory();
 
         if (_texture != null) SDL3.SDL_DestroyTexture(_texture);
         if (_renderer != null) SDL3.SDL_DestroyRenderer(_renderer);
