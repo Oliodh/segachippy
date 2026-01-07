@@ -33,7 +33,8 @@ public sealed class SmsBus : IZ80Bus
         Array.Clear(_ram);
         _bank0 = 0;
         _bank1 = 1;
-        _bank2 = 2;
+        int lastBank = (_rom.Length + 0x3FFF) / 0x4000 - 1;
+        _bank2 = Math.Max(2, lastBank);
         Joypad1 = 0xFF;
         Joypad2 = 0xFF;
     }
