@@ -103,7 +103,7 @@ unsafe class Program
                     _sms.RunFrame();
                     _frameCount++;
                     
-                    // Log every 300 frames (6 seconds at 50fps)
+                    // Log periodically (every 300 frames = 6 seconds at 50fps)
                     if (_frameCount - _lastLoggedFrame >= 300)
                     {
                         Console.WriteLine($"[DEBUG] Running: frame {_frameCount}, paused={_paused}");
@@ -360,7 +360,9 @@ unsafe class Program
         catch (Exception ex)
         {
             Console.WriteLine($"ERROR: Failed to load ROM: {ex.Message}");
+#if DEBUG
             Console.WriteLine($"Stack trace: {ex.StackTrace}");
+#endif
         }
     }
 
@@ -378,9 +380,7 @@ unsafe class Program
     {
         if (_sms == null)
         {
-            // Clear to black when no SMS system
-            SDL3.SDL_RenderClear(_renderer);
-            SDL3.SDL_RenderPresent(_renderer);
+            RenderBlankScreen();
             return;
         }
 
@@ -403,6 +403,12 @@ unsafe class Program
 
         SDL3.SDL_RenderClear(_renderer);
         SDL3.SDL_RenderTexture(_renderer, _texture, null, null);
+        SDL3.SDL_RenderPresent(_renderer);
+    }
+
+    static void RenderBlankScreen()
+    {
+        SDL3.SDL_RenderClear(_renderer);
         SDL3.SDL_RenderPresent(_renderer);
     }
 
