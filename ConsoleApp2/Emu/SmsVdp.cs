@@ -37,7 +37,7 @@ public sealed class SmsVdp
     public byte ReadHCounter()
     {
         // Map cycles in line (0..CyclesPerLine) to 0..255 range expected by games
-        int h = (_cyclesInLine * 256) / CyclesPerLine;
+        int h = (_cyclesInLine * 256 + (CyclesPerLine / 2)) / CyclesPerLine;
         return (byte)h;
     }
 
