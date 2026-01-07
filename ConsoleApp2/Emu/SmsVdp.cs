@@ -40,6 +40,7 @@ public sealed class SmsVdp
         // Map cycles in line (0..CyclesPerLine) to 0..255 range expected by games.
         // Add half a line to round to the nearest integer; port reads are infrequent.
         int h = (int)(((long)_cyclesInLine * 256 + HalfCyclesPerLine) / CyclesPerLine);
+        if (h > 255) h = 255;
         return (byte)h;
     }
 
