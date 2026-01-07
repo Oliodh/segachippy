@@ -14,6 +14,8 @@ unsafe class Program
     private static bool _running = true;
     private static bool _paused = true;
     private static string? _lastRomDir;
+    private static SDL_DialogFileFilter[]? _dialogFilters;
+    private static GCHandle _dialogFiltersHandle = default;
 
     private const int ScreenWidth = 256;
     private const int ScreenHeight = 192;
@@ -177,17 +179,17 @@ unsafe class Program
         filter.name = (byte*)_dialogFilterNamePtr;
         filter.pattern = (byte*)_dialogFilterPatternPtr;
 
-        SDL_DialogFileFilter[] filters = new SDL_DialogFileFilter[] { filter };
+        if (_dialogFiltersHandle.IsAllocated) _dialogFiltersHandle.Free();
+        _dialogFilters = new SDL_DialogFileFilter[] { filter };
+        _dialogFiltersHandle = GCHandle.Alloc(_dialogFilters, GCHandleType.Pinned);
 
         // Determine the default location
         string defaultLocation = _lastRomDir ?? Environment.CurrentDirectory;
         _dialogDefaultLocationPtr = Marshal.StringToHGlobalAnsi(defaultLocation);
 
         // Show the file dialog with function pointer
-        fixed (SDL_DialogFileFilter* filtersPtr = filters)
-        {
-            SDL3.SDL_ShowOpenFileDialog(&FileDialogCallback, 0, _window, filtersPtr, 1, (byte*)_dialogDefaultLocationPtr, false);
-        }
+        SDL_DialogFileFilter* filtersPtr = (SDL_DialogFileFilter*)_dialogFiltersHandle.AddrOfPinnedObject();
+        SDL3.SDL_ShowOpenFileDialog(&FileDialogCallback, 0, _window, filtersPtr, 1, (byte*)_dialogDefaultLocationPtr, false);
 
         // Note: Memory will be freed in the callback or on next dialog open
         // Note: The callback will be invoked asynchronously when the user selects a file
@@ -199,6 +201,9 @@ unsafe class Program
         if (_dialogFilterNamePtr != nint.Zero) Marshal.FreeHGlobal(_dialogFilterNamePtr);
         if (_dialogFilterPatternPtr != nint.Zero) Marshal.FreeHGlobal(_dialogFilterPatternPtr);
         if (_dialogDefaultLocationPtr != nint.Zero) Marshal.FreeHGlobal(_dialogDefaultLocationPtr);
+        _dialogFilters = null;
+        if (_dialogFiltersHandle.IsAllocated) _dialogFiltersHandle.Free();
+        _dialogFiltersHandle = default;
         _dialogFilterNamePtr = nint.Zero;
         _dialogFilterPatternPtr = nint.Zero;
         _dialogDefaultLocationPtr = nint.Zero;
@@ -226,6 +231,8 @@ unsafe class Program
             Console.WriteLine($"User selected: {filePath}");
             LoadRom(filePath);
         }
+
+        FreeDialogMemory();
     }
 
     static void CreateTestRom()
