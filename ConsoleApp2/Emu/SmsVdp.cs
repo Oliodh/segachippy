@@ -22,6 +22,7 @@ public sealed class SmsVdp
 
     // Timing constants (PAL)
     private const int CyclesPerLine = 228;
+    private const double HCounterScale = 256.0 / CyclesPerLine;
     private const int LinesPerFrame = 313;
     private const int ActiveLines = 192;
 
@@ -33,6 +34,20 @@ public sealed class SmsVdp
     public byte[] FramebufferRgba32 { get; }
     public bool VBlankInterrupt { get; private set; }
     public bool LineInterrupt { get; private set; }
+
+    public byte ReadHCounter()
+    {
+        // Map cycles in line (0..CyclesPerLine) to 0..255 range expected by games.
+        int h = (int)(_cyclesInLine * HCounterScale + 0.5);
+        if (h > 255) h = 255;
+        return (byte)h;
+    }
+
+    public byte ReadVCounter()
+    {
+        // Games poll V counter for timing; wrap at 8 bits
+        return (byte)(_line & 0xFF);
+    }
 
     public void Reset()
     {
