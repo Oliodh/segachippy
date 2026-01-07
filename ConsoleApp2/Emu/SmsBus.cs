@@ -41,7 +41,7 @@ public sealed class SmsBus : IZ80Bus
         }
         else
         {
-            // Ceiling divide to get the 0-based index of the last 16KB bank; clamp to 2 so ROMs with 3 or fewer banks (≤48KB) keep the old mirrored slot2 mapping
+            // Ceiling divide to get the 0-based index of the last 16KB bank; clamp to 2 so ROMs with 3 or fewer banks (≤48KB) keep the old mirrored bank2 mapping
             int bankCount = (_rom.Length + (BankSize - 1)) / BankSize;
             int lastBank = bankCount - 1;
             _bank2 = Math.Max(2, lastBank);
