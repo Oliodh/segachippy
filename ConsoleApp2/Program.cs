@@ -19,6 +19,11 @@ unsafe class Program
     private const int ScreenHeight = 192;
     private const int Scale = 3;
 
+    // Keep allocated memory for file dialog alive until callback completes
+    private static nint _dialogFilterNamePtr;
+    private static nint _dialogFilterPatternPtr;
+    private static nint _dialogDefaultLocationPtr;
+
     static int Main(string[] args)
     {
         if (!SDL3.SDL_Init(SDL_InitFlags.SDL_INIT_VIDEO))
@@ -162,30 +167,31 @@ unsafe class Program
     {
         Console.WriteLine("\n=== Opening ROM File Dialog ===");
 
+        // Free any previously allocated memory
+        if (_dialogFilterNamePtr != 0) Marshal.FreeHGlobal(_dialogFilterNamePtr);
+        if (_dialogFilterPatternPtr != 0) Marshal.FreeHGlobal(_dialogFilterPatternPtr);
+        if (_dialogDefaultLocationPtr != 0) Marshal.FreeHGlobal(_dialogDefaultLocationPtr);
+
         // Define file filter for SMS ROM files
         SDL_DialogFileFilter filter = new SDL_DialogFileFilter();
-        nint namePtr = Marshal.StringToHGlobalAnsi("Sega Master System ROMs");
-        nint patternPtr = Marshal.StringToHGlobalAnsi("sms");
-        filter.name = (byte*)namePtr;
-        filter.pattern = (byte*)patternPtr;
+        _dialogFilterNamePtr = Marshal.StringToHGlobalAnsi("Sega Master System ROMs");
+        _dialogFilterPatternPtr = Marshal.StringToHGlobalAnsi("*.sms");
+        filter.name = (byte*)_dialogFilterNamePtr;
+        filter.pattern = (byte*)_dialogFilterPatternPtr;
 
         SDL_DialogFileFilter[] filters = new SDL_DialogFileFilter[] { filter };
 
         // Determine the default location
         string defaultLocation = _lastRomDir ?? Environment.CurrentDirectory;
-        nint defaultLocationPtr = Marshal.StringToHGlobalAnsi(defaultLocation);
+        _dialogDefaultLocationPtr = Marshal.StringToHGlobalAnsi(defaultLocation);
 
         // Show the file dialog with function pointer
         fixed (SDL_DialogFileFilter* filtersPtr = filters)
         {
-            SDL3.SDL_ShowOpenFileDialog(&FileDialogCallback, 0, _window, filtersPtr, 1, (byte*)defaultLocationPtr, false);
+            SDL3.SDL_ShowOpenFileDialog(&FileDialogCallback, 0, _window, filtersPtr, 1, (byte*)_dialogDefaultLocationPtr, false);
         }
 
-        // Free allocated memory
-        Marshal.FreeHGlobal(namePtr);
-        Marshal.FreeHGlobal(patternPtr);
-        Marshal.FreeHGlobal(defaultLocationPtr);
-
+        // Note: Memory will be freed in the callback or on next dialog open
         // Note: The callback will be invoked asynchronously when the user selects a file
         Console.WriteLine("File dialog opened. Select a ROM file...");
     }
@@ -316,6 +322,11 @@ unsafe class Program
 
     static void Cleanup()
     {
+        // Free dialog memory if allocated
+        if (_dialogFilterNamePtr != 0) Marshal.FreeHGlobal(_dialogFilterNamePtr);
+        if (_dialogFilterPatternPtr != 0) Marshal.FreeHGlobal(_dialogFilterPatternPtr);
+        if (_dialogDefaultLocationPtr != 0) Marshal.FreeHGlobal(_dialogDefaultLocationPtr);
+
         if (_texture != null) SDL3.SDL_DestroyTexture(_texture);
         if (_renderer != null) SDL3.SDL_DestroyRenderer(_renderer);
         if (_window != null) SDL3.SDL_DestroyWindow(_window);
