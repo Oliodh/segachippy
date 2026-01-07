@@ -34,6 +34,19 @@ public sealed class SmsVdp
     public bool VBlankInterrupt { get; private set; }
     public bool LineInterrupt { get; private set; }
 
+    public byte ReadHCounter()
+    {
+        // Map cycles in line (0..CyclesPerLine) to 0..255 range expected by games
+        int h = (_cyclesInLine * 256) / CyclesPerLine;
+        return (byte)h;
+    }
+
+    public byte ReadVCounter()
+    {
+        // Games poll V counter for timing; wrap at 8 bits
+        return (byte)(_line & 0xFF);
+    }
+
     public void Reset()
     {
         Array.Clear(_vram);

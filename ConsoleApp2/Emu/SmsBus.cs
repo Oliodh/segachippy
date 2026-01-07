@@ -93,6 +93,12 @@ public sealed class SmsBus : IZ80Bus
 
     public byte ReadPort(byte port)
     {
+        // VDP counters: 0x7E = H counter, 0x7F = V counter
+        if ((port & 0xFE) == 0x7E)
+        {
+            return (port & 1) == 0 ? _vdp.ReadHCounter() : _vdp.ReadVCounter();
+        }
+
         // VDP ports (active when bits 6 set, bit 0 determines data/control)
         if ((port & 0xC0) == 0x80)
         {
