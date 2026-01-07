@@ -94,6 +94,7 @@ public sealed class SmsBus : IZ80Bus
     public byte ReadPort(byte port)
     {
         // VDP counters: 0x7E = H counter, 0x7F = V counter
+        // Note: 0x7F shares the PSG write port; reads return V counter.
         if (port == 0x7E) return _vdp.ReadHCounter();
         if (port == 0x7F) return _vdp.ReadVCounter();
 

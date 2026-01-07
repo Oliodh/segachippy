@@ -22,6 +22,7 @@ public sealed class SmsVdp
 
     // Timing constants (PAL)
     private const int CyclesPerLine = 228;
+    private const int HalfCyclesPerLine = CyclesPerLine / 2;
     private const int LinesPerFrame = 313;
     private const int ActiveLines = 192;
 
@@ -38,7 +39,7 @@ public sealed class SmsVdp
     {
         // Map cycles in line (0..CyclesPerLine) to 0..255 range expected by games.
         // Port reads are infrequent, so keep the straightforward calculation.
-        int h = (_cyclesInLine * 256 + (CyclesPerLine / 2)) / CyclesPerLine;
+        int h = (int)(((long)_cyclesInLine * 256 + HalfCyclesPerLine) / CyclesPerLine);
         return (byte)h;
     }
 
