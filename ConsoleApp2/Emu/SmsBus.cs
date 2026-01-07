@@ -41,7 +41,7 @@ public sealed class SmsBus : IZ80Bus
         }
         else
         {
-            // Ceiling divide to find last 16KB page; keep bank2 at least 2 to match small ROM mirroring
+            // Ceiling divide to find last 16KB bank index; keep bank2 at least 2 to match small ROM mirroring
             int lastBank = (_rom.Length + (BankSize - 1)) / BankSize - 1;
             _bank2 = Math.Max(2, lastBank);
         }
