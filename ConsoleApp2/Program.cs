@@ -30,6 +30,14 @@ unsafe class Program
 
     static int Main(string[] args)
     {
+        Console.WriteLine("=== SegaChippy SMS Emulator Starting ===");
+        Console.WriteLine($"Command-line arguments: {args.Length}");
+        for (int i = 0; i < args.Length; i++)
+        {
+            Console.WriteLine($"  args[{i}] = {args[i]}");
+        }
+        Console.WriteLine();
+        
         if (!SDL3.SDL_Init(SDL_InitFlags.SDL_INIT_VIDEO))
         {
             Console.WriteLine($"SDL init failed: {SDL3.SDL_GetError()}");
@@ -60,11 +68,24 @@ unsafe class Program
         }
 
         _sms = new SmsSystem(SmsRegion.Pal);
+        Console.WriteLine("SmsSystem initialized (PAL region, 50 Hz)");
 
         if (args.Length > 0 && File.Exists(args[0]))
         {
+            Console.WriteLine($"Loading ROM from command-line argument: {args[0]}");
             LoadRom(args[0]);
         }
+        else if (args.Length > 0)
+        {
+            Console.WriteLine($"WARNING: Command-line argument provided but file doesn't exist: {args[0]}");
+        }
+        else
+        {
+            Console.WriteLine("No ROM loaded. Press 'R' to load a ROM or drag and drop a .sms file onto the window.");
+        }
+
+        Console.WriteLine("\n=== Entering main loop ===");
+        Console.WriteLine($"Initial state: _paused={_paused}, _running={_running}\n");
 
         var sw = Stopwatch.StartNew();
         double frameTime = 1000.0 / 50.0;
