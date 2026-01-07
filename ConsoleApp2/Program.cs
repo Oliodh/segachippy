@@ -160,37 +160,58 @@ unsafe class Program
 
     static void OpenRomSelector()
     {
-        string[] searchPaths = {
-            _lastRomDir ?? "",
-            Environment.CurrentDirectory,
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ROMs"),
-            Path.GetTempPath()
-        };
+        Console.WriteLine("\n=== Opening ROM File Dialog ===");
 
-        Console.WriteLine("\n=== ROM Selector (R pressed) ===");
+        // Define file filter for SMS ROM files
+        SDL_DialogFileFilter filter = new SDL_DialogFileFilter();
+        nint namePtr = Marshal.StringToHGlobalAnsi("Sega Master System ROMs");
+        nint patternPtr = Marshal.StringToHGlobalAnsi("sms");
+        filter.name = (byte*)namePtr;
+        filter.pattern = (byte*)patternPtr;
 
-        var romFiles = new System.Collections.Generic.List<string>();
-        foreach (var searchPath in searchPaths)
+        SDL_DialogFileFilter[] filters = new SDL_DialogFileFilter[] { filter };
+
+        // Determine the default location
+        string defaultLocation = _lastRomDir ?? Environment.CurrentDirectory;
+        nint defaultLocationPtr = Marshal.StringToHGlobalAnsi(defaultLocation);
+
+        // Show the file dialog with function pointer
+        fixed (SDL_DialogFileFilter* filtersPtr = filters)
         {
-            if (string.IsNullOrEmpty(searchPath) || !Directory.Exists(searchPath)) continue;
-            try
-            {
-                var files = Directory.GetFiles(searchPath, "*.sms", SearchOption.TopDirectoryOnly);
-                foreach (var f in files)
-                    if (!romFiles.Contains(f)) romFiles.Add(f);
-            }
-            catch { }
+            SDL3.SDL_ShowOpenFileDialog(&FileDialogCallback, 0, _window, filtersPtr, 1, (byte*)defaultLocationPtr, false);
         }
 
-        if (romFiles.Count == 0)
+        // Free allocated memory
+        Marshal.FreeHGlobal(namePtr);
+        Marshal.FreeHGlobal(patternPtr);
+        Marshal.FreeHGlobal(defaultLocationPtr);
+
+        // Note: The callback will be invoked asynchronously when the user selects a file
+        Console.WriteLine("File dialog opened. Select a ROM file...");
+    }
+
+    [System.Runtime.InteropServices.UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    static void FileDialogCallback(nint userdata, byte** filelist, int filter)
+    {
+        if (filelist == null)
         {
-            Console.WriteLine("No .sms ROM files found. Creating test ROM...");
-            CreateTestRom();
+            Console.WriteLine("File dialog error occurred.");
             return;
         }
 
-        Console.WriteLine($"Found {romFiles.Count} ROM(s). Loading: {Path.GetFileName(romFiles[0])}");
-        LoadRom(romFiles[0]);
+        if (*filelist == null)
+        {
+            Console.WriteLine("File dialog cancelled by user.");
+            return;
+        }
+
+        // Get the first selected file
+        string? filePath = Marshal.PtrToStringUTF8((nint)(*filelist));
+        if (!string.IsNullOrEmpty(filePath))
+        {
+            Console.WriteLine($"User selected: {filePath}");
+            LoadRom(filePath);
+        }
     }
 
     static void CreateTestRom()
